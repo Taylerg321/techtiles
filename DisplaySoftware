@@ -1,0 +1,307 @@
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <map>
+#include <stdio.h>
+//#include <stdlib.h>
+#include <string.h>
+#include <cstdlib>
+#include <windows.h>
+#include <mmsystem.h>
+#include <time.h>
+#include <chrono>
+#include <bitset>
+
+
+using namespace std;
+
+
+//TODO: Change the "col" variables to read as "node", this wont change functionality but will make it easier to read/understand
+void DisplayGrid(map<string,int> data, int time, string outputFile) {
+    int totalColumns;
+    int totalRows;
+    string key;
+    ofstream outputfile;
+    outputfile.open(outputFile);
+
+    totalColumns = data.size();
+
+    for (int col = 0; col < totalColumns; col++) {
+            key = to_string(col);
+
+            //determine when we enter a new row of sensors
+            
+            if ((col != 0) && (col % 44 == 0)) {
+                cout << endl;
+                outputfile << endl;
+            }
+
+            //output either high or low based on sensor data (0 is high, o is low)
+            if (data[key] == 0) {
+                cout << " ";
+                outputfile << "_";
+            }
+            else if (data[key] == 1) {
+                cout << "#";
+                outputfile << "#";
+            }
+            //remove any extra characters
+            if ((col == totalColumns - 1) || ((col % 44 == 0) && (col != 0))) {
+                cout << '\b'; //move cursor back 1 space
+                cout << " "; //overwrite with a space
+                outputfile << '\b';
+                outputfile << " ";
+            }
+    }
+    cout << endl;
+    outputfile << time;
+    outputfile.close();
+    return;
+};
+
+//This function is used as the true fall detector, it reads our results array and then finds if there are a given number of hits in a single area
+int countHits(map<string, int> data) {
+    int counter = 0;
+    string key;
+    int k;
+    for (int i = 0; i < 5; i++) {
+        for (int j = 0; j < 5; j++) {
+            k = i * 44;
+            key = to_string(j + k);
+            counter += data[key];
+        }
+    }
+    return counter;
+}
+
+//displays sensor data on the map
+auto read_data_to_map(string inputFilePath){
+    ifstream file;
+    file.open(inputFilePath);
+    bool file_open = file.is_open();
+    string line = "";
+    string key;
+    string ssx;
+    string ssy;
+    int value = 0;
+    map <string, int> data;
+    while (file.is_open() && getline(file, line)) {
+        stringstream ss(line); //stores string variable "line" in string variable ss (as an array type of structure?)
+        ss >> key >> ssx;
+        value = stoi(ssx); //casting ssx (string variable stored in SS array) as an int and storing in value
+        data[key] = value;
+
+    }
+    file.close();
+    return data;
+}
+
+//TODO TODO TODO: TEST
+//this function takes the arduino ID number and finds its corresponding tile
+int FindTile(int ID) {
+    int tile_num;
+    switch (ID) {
+    //tile 1 x
+    case 0:
+        tile_num = 1;
+        break;
+    //tile 1 y
+    case 1:
+        tile_num = 1;
+        break;
+    //tile 2 x
+    case 2:
+        tile_num = 2;
+        break;
+    //tile 2 y
+    case 3:
+        tile_num = 2;
+        break;
+    //tile 3 x
+    case 4:
+        tile_num = 3;
+        break;
+    //tile 3 y
+    case 5:
+        tile_num = 3;
+        break;
+    //tile 4 x
+    case 6:
+        tile_num = 4;
+        break;
+    //tile 4 y
+    case 7:
+        tile_num = 4;
+        break;
+    default:
+        tile_num = -1;
+        cout << "whoops :)" << endl; //TODO: write a better message :)
+        break;
+    }
+    return tile_num;
+}
+//TODO TODO TODO: TEST. there is a chance that the node_num equation is not working properly
+//This function takes the data recieved from connor, extracts the aruino ID
+//It also will take two data arrays (x and y) that will be declared and given in main(), these arrays will be used for data calculation
+//It also takes a results array from main that is used to store calculation results, it then writes these results to resultsFile given in main
+void setResults(int ID, int num_of_tiles, int dataX[], int dataY[], int results[], string resultsFile) {
+    int tile_num = FindTile(ID);
+    int num_nodes = 11 * 11 * num_of_tiles;
+    int node_num;
+    //x-val
+    for (int i = 1; i < 12; i++) {
+        //y-val
+        for (int j = 1; j < 12; j++) {
+            //node # equation given by Alyssa
+            node_num = ((11 * num_of_tiles) * (j-1)) + i + (11 * (tile_num - 1));
+            if ((dataX[i] == 1) && (dataY[j] == 1)) {
+                //results should be getting copied in the correct place in results array (will be used in map)
+                results[node_num] = 1;
+            }
+            else {
+                results[node_num] = 0;
+            }
+        }
+    }
+    //input results array into file (DSI.txt)
+    int size = sizeof(results);
+    ofstream resultsfile;
+    resultsfile.open(resultsFile);
+    for (int x = 1; x < 485; x++) { //TODO: replace 485 with size
+        resultsfile << x << " " << results[x] << endl;
+    }
+    resultsfile.close();
+    return;
+}
+
+//TODO: TEST
+//this function is used specifically for extracting the data into a new array that does not contain arduino ID #
+//function calls findTile and returns the same # returned from findTile
+int parsedata(int recieved[], int tileDataX[], int tileDataY[]) {
+    int arduino_ID = recieved[0];
+    int tile_ID = FindTile(arduino_ID);
+    int size = sizeof(recieved);
+    if ((arduino_ID == 0) || (arduino_ID == 2) || (arduino_ID == 4) || (arduino_ID == 6)) {
+        for (int i = 1; i < 12; i++) { //TODO: replace 12 with size
+            tileDataX[i] = recieved[i];
+        }
+    }
+    else if ((arduino_ID == 1) || (arduino_ID == 3) || (arduino_ID == 5) || (arduino_ID == 7)) {
+        for (int i = 1; i < 12; i++) { //TODO: replace 12 with size
+            tileDataY[i] = recieved[i];
+        }
+    }
+    return tile_ID;
+}
+
+void establishConnection(string portNum) {
+   
+    // Open serial port
+    
+    HANDLE serialHandle;
+    wstring temp = wstring(portNum.begin(), portNum.end());
+    LPCWSTR port = temp.c_str();
+    serialHandle = CreateFile( port, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+
+    // Do some basic settings
+    DCB serialParams = { 0 };
+    serialParams.DCBlength = sizeof(serialParams);
+
+    //TODO: Work with Andrew to find baudrate and other settings
+    GetCommState(serialHandle, &serialParams);
+    serialParams.BaudRate = 115200;
+    serialParams.ByteSize = 8;
+    serialParams.StopBits = TWOSTOPBITS;
+    serialParams.Parity = NOPARITY;
+    SetCommState(serialHandle, &serialParams);
+
+    
+
+}
+
+
+int main(int time)
+{
+        int dataX[12];
+        int dataY[12];
+        int recievedData[12];
+        const int numNodes = 11 * 11 * 4; //change this 4 if there are going to be additional tiles
+        int results[numNodes];
+        int tile_ID;
+        int countNum = 0;
+        int trueCount = 0;
+        string datafile = "TODO: get name of data file";
+        string user_password;
+        string administrative_password = "12345";
+        map<string, int> map_data;
+        //populate results array with 0's initially so that we do not need to recieve full map data from connor in order to update the display
+        for (int i = 0; i < numNodes; i++) {
+            results[i] = 0;
+        }
+        //meat and potatoes down below
+    while (1) {
+
+        auto overallstart = chrono::steady_clock::now();
+        /*
+        ifstream inFile;
+
+        //wait for connor to close the file on his end
+        while (inFile.is_open()) {
+            Sleep(100);
+        }
+
+        
+
+        //open the file once hes done with it
+        inFile.open(datafile);
+        */
+
+        //TODO: remove this after testing
+        recievedData[0] = 0;
+        for (int i = 1; i < 12; i++) {
+            recievedData[i] = 1;
+        }
+        tile_ID = parsedata(recievedData, dataX, dataY); //reads data from the recieved message into either x or y, returns tile ID
+
+        //TODO: remove this after testing
+        recievedData[0] = 1;
+        for (int i = 1; i < 12; i++) {
+            recievedData[i] = 1;
+        }
+
+        parsedata(recievedData, dataX, dataY);
+        
+        setResults(tile_ID, 4, dataX, dataY, results, "C:\\Users\\Owner\\OneDrive\\Documents\\UK 2021-2022\\Spring 2022\\CPE 491\\DSI.txt"); //DSI.txt will be the file our map reads from
+
+        map_data = read_data_to_map("C:\\Users\\Owner\\OneDrive\\Documents\\UK 2021-2022\\Spring 2022\\CPE 491\\DSI.txt");
+
+        DisplayGrid(map_data, time, "detectedfall.txt");
+
+        countNum = countHits(map_data);
+        if (countNum >= 10) {
+            trueCount++;
+            Sleep(3000);
+        }
+        if (trueCount >= 2) {
+            trueCount = 0;
+            PlaySound(TEXT("C:\\Users\\Owner\\source\\repos\\CS491 DSI prototype 1\\CS491 DSI prototype 1\\alarm.wav"), NULL, SND_FILENAME | SND_ASYNC);
+            auto start = chrono::steady_clock::now();
+            cout << "Enter password: ";
+            cin >> user_password;
+            while (user_password != administrative_password) {
+                cout << "ERROR: incorrect password" << endl;
+                cout << "Please enter the administrative password: ";
+                cin >> user_password;
+            }
+            auto end = chrono::steady_clock::now();
+            int time = chrono::duration_cast<chrono::seconds>(end - start).count();
+            cout << time << " seconds passed since a fall was detected" << endl;
+            system("pause");
+        }
+
+        auto overallend = chrono::steady_clock::now();
+        int overalltime = chrono::duration_cast<chrono::seconds>(overallend - overallstart).count();
+        cout << overalltime << " seconds passed" << endl;
+    }
+}
